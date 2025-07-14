@@ -64,7 +64,12 @@ const userSchema = new mongoose.Schema({
   lastLogin: {
     type: Date,
     default: Date.now()
-  }
+  },
+  role: {
+  type: String,
+  enum: ["user", "admin"],
+  default: "user"
+}
 },
 {timestamps: true,
   toObject: {virtuals: true}

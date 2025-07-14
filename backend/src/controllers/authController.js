@@ -1,5 +1,7 @@
 import jwt from "jsonwebtoken"
 import User from "../models/User"
+import Blog from "../models/Blog"
+import Comment from "../models/Comment"
 import { validationResult } from "express-validator"
 
 //generate token
@@ -65,7 +67,7 @@ export const login = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({
+      return res.status(400).json({
         errors: errors.array(),
       })
     }
@@ -74,7 +76,10 @@ export const login = async (req, res) => {
 
     //find user through email and username
     const user = await User.findOne({
-      $or: [{ username: username }, { email: email }]
+      $or: [
+        { username: username?.toLowerCase() }, 
+        { email: email?.toLowerCase() }
+      ]
     }).select("+password");
 
     if(!user || !(await user.comparePassword(password))) {
@@ -82,6 +87,9 @@ export const login = async (req, res) => {
             message: "Invalid credentials"
         })
     }
+
+    user.lastLogin = new Date()
+    await user.save()
 
     const token = generateToken(user._id)
 
@@ -120,4 +128,113 @@ export const getUser = async (req, res) => {
             message: "server error", error: error.message
         })
     }
+}
+
+export const updateUserProfile = async (req, res) => {
+  try {
+    const errors = validationResult(req)
+    if(!errors.isEmpty()){
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      })
+    }
+
+    const { username, fullName, bio, avatar } = req.body
+    const user = await User.findById(req.user.id)
+
+    if(!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      })
+    }
+
+    if(username !== undefined) user.username = username
+
+    if(fullName !== undefined) user.fullName = fullName
+      
+    if(bio !== undefined) user.bio = bio
+      
+    if(avatar !== undefined) user.avatar = avatar
+     
+    await user.save()
+
+    res.status(200).json({
+      success: true,
+      user,
+      message: "Profile updated successfully"
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "server error",
+      error: error.message
+    })
+  }
+}
+
+export const changePassword = async (req, res) => {
+  try {
+    const errors = validationResult(req)
+    if(!errors.isEmpty()){
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      })
+    }
+
+    const { currentPassword, newPassword } = req.body
+    const user = await User.findById(req.user.id).select("+password")
+
+    if(!user || !(await user.comparePassword(currentPassword))) {
+      return res.status(401).json({
+        success: false,
+        message: "Current password is incorrect"
+      })
+    }
+
+    user.password = newPassword
+    await user.save()
+
+    res.status(200).json({
+      success: true,
+      message: "Password updated successfully"
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "server error",
+      error: error.message
+    })
+  }
+}
+
+export const deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user.id
+
+    const user = await User.findByIdAndDelete(userId)
+    if(!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      })
+    }
+
+    await Blog.deleteMany({author: userId})
+
+    await Comment.deleteMany({user: userId})
+
+    res.status(200).json({
+      success: true,
+      message: "Your account has been permanently deleted"
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "server error",
+      error: error.message
+    })
+  }
 }

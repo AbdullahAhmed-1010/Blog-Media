@@ -89,6 +89,7 @@ const isAdmin = async (req, res, next) => {
         next()
     } catch (error) {
         console.error("admin check error", error)
+        
         return res.status(500).json({
             success: false,
             message: "server error during admin check"
