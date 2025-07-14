@@ -30,7 +30,9 @@ const blogSchema = new mongoose.Schema({
     },
     tags: {
         type: String,
-        trim: true
+        trim: true,
+        lowercase: true,
+        maxLength: [30, "Tag cannot exceed 30 characters"]
     },
     category: {
         type: String,
@@ -38,6 +40,10 @@ const blogSchema = new mongoose.Schema({
         default: "other"
     },
     likes: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+    }],
+    savedBy: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
     }],
@@ -52,15 +58,19 @@ const blogSchema = new mongoose.Schema({
     },
     slug: {
         type: String,
-        unique: true
+        unique: true,
+        trim: true,
+        lowercase: true
     },
     readTime: {
         type: Number,
         default: 1
     }
-}, {timestamps: true})
+}, {timestamps: true,
+    toObject: {virtuals: true}
+})
 
-//create slug from title
+// create slug from title
 blogSchema.pre("save", function(next){
     if(this.isModified("title")) {
         this.slug = this.title.toLowerCase()
@@ -69,20 +79,56 @@ blogSchema.pre("save", function(next){
         .replace(/^-|-$/g, '') + '-' + Date.now()
     }
 
-    //calculate read time
+    // calculate read time
     if(this.isModified("content")) {
         const wordCount = this.content.split(" ").length
-        this.readTime = Math.ceil(wordCount/200) //assuming 200 words per minute
+        this.readTime = Math.ceil(wordCount/200) // assuming 200 words per minute
     }
     next()
 })
 
-//comment count
+// virtual for like count
+blogSchema.virtual("likeCount").get(function() {
+    return this.likes.length
+})
+
+// virtual for save count
+blogSchema.virtual("saveCount").get(function() {
+    return this.savedBy.length
+})
+
+// virtual for comment count
 blogSchema.virtual("commentCount", {
     ref: "comment",
     localField: "_id",
     foreignField: "blog",
     count: true
 })
+
+// to check if user has liked the blog
+blogSchema.methods.isLikedBy = function(userId) {
+  return this.likes.includes(userId);
+}
+
+// to check if user has saved the blog
+blogSchema.methods.isSavedBy = function(userId) {
+  return this.savedBy.includes(userId);
+}
+
+// to get trending blogs
+blogSchema.statics.getTrending = function(limit = 10) {
+  return this.find({ isPublished: true })
+    .populate("author", "username fullName profilePicture")
+    .sort({ views: -1, createdAt: -1 })
+    .limit(limit)
+}
+
+// indexing for better query performance
+blogSchema.index({ author: 1, createdAt: -1 });
+blogSchema.index({ slug: 1 });
+blogSchema.index({ tags: 1 });
+blogSchema.index({ createdAt: -1 });
+blogSchema.index({ views: -1 });
+blogSchema.index({ "likes": 1 });
 
 export default mongoose.model("Blog", blogSchema)

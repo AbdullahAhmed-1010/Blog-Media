@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-
 import { bcrypt } from "bcryptjs";
 
 const userSchema = new mongoose.Schema({
@@ -61,20 +60,64 @@ const userSchema = new mongoose.Schema({
   isVerified: {
     type: Boolean,
     default: false
+  },
+  lastLogin: {
+    type: Date,
+    default: Date.now()
   }
 },
-{timestamps: true});
+{timestamps: true,
+  toObject: {virtuals: true}
+});
 
-userSchema.pre("save", async (next) => {
+// virtual for followers count
+userSchema.virtual("followerCount").get(function() {
+  return this.followers.length
+})
+
+// virtual for following count
+userSchema.virtual("followingCount").get(function() {
+  return this.following.length
+})
+
+// virtual for blog count
+userSchema.virtual("blogCount", {
+  ref: "Blog",
+  localField: "_id",
+  foreignField: "author",
+  count: true
+})
+
+// pre-save middleware to hash password
+userSchema.pre("save", async function (next) {
     if(!this.isModified("password")){
         return next()
     }
-    this.password = await bcrypt.hash(this.password, 12)
-    next()
+    try {
+      this.password = await bcrypt.hash(this.password, 12)
+      next()
+    } catch (error) {
+      next(error)
+    }
 })
 
-userSchema.methods.comparePassword = async (candidatePassword) => {
+// compare password
+userSchema.methods.comparePassword = async function (candidatePassword) {
     return await bcrypt.compare(candidatePassword, this.password)
 }
+
+// get public profile
+userSchema.methods.getPublicProfile = function() {
+  const userObject = this.toObject()
+  
+  delete userObject.password
+  delete userObject.email
+  return userObject
+}
+
+// indexing for better query performance
+userSchema.index({ username: 1 })
+userSchema.index({ email: 1 })
+userSchema.index({ createdAt: -1 })
 
 export default mongoose.model("User", userSchema)
