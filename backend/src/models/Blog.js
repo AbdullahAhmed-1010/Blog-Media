@@ -25,7 +25,7 @@ const blogSchema = new mongoose.Schema({
         type: String,
         default: ""
     },
-    mediaFile: {
+    mediaFiles: {
         type: String
     },
     tags: {
