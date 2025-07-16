@@ -14,6 +14,7 @@ const storage = multer.memoryStorage();
 
 // File filter function
 const fileFilter = (req, file, cb) => {
+    
   // Check file type
   if (file.fieldname === 'images') {
     // Accept only image files
