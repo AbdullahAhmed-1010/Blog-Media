@@ -11,11 +11,12 @@ import {
     userSavedBlog
 } from "../controllers/blogController"
 import { auth, isResourceOwner } from "../middlewares/auth"
+import { uploadMediaFiles } from "../middlewares/fileUpload"
 import Blog from "../models/Blog"
 
 const router = express.Router()
 
-router.post("/", auth, [
+router.post("/", auth, uploadMediaFiles.array("mediaFiles"), [
     body("title")
       .trim()
       .isLength({min: 1, max: 255})
@@ -39,7 +40,7 @@ router.post("/", auth, [
 
 router.get("/", getAllBlogs)
 router.get("/:slug", getBlog)
-router.put("/update/:id", auth, isResourceOwner(Blog), updateBlog)
+router.put("/update/:id", auth, uploadMediaFiles.array("mediaFiles"), isResourceOwner(Blog), updateBlog)
 router.delete("/delete/:id", auth, isResourceOwner(Blog), deleteBlog)
 router.post("/:id/like", auth, likeBlog)
 router.post("/:id/save", auth, saveBlog)
