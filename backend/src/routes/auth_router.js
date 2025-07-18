@@ -11,6 +11,7 @@ import {
 } from "../controllers/authController"
 import { auth, isAdmin } from "../middlewares/auth"
 import User from "../models/User"
+import { uploadAvatar, handleMulterError } from "../utils/upload"
 
 const router = express.Router()
 
@@ -33,7 +34,7 @@ router.post("/register", [
       .notEmpty()
       .withMessage("Full name is required")
       .trim()
-], register)
+], uploadAvatar, handleMulterError, register)
 
 // login
 router.post("/login", [
@@ -48,26 +49,6 @@ router.post("/login", [
 
 // get user profile
 router.get("/profile", auth, getUser)
-
-// update user profile
-router.put("/update-profile", auth, [
-    body("username")
-      .optional()
-      .isLength({min: 3, max: 20})
-      .withMessage("Username must be between 3 and 20 characters")
-      .matches(/^[a-zA-Z0-9_]+$/)
-      .withMessage("Username can only contain letters, numbers and underscores"),
-    body("fullName")
-      .optional()
-      .trim(),
-    body("bio")
-      .optional()
-      .isLength({ max: 200 })
-      .withMessage('Bio cannot exceed 200 characters')
-      .trim(),
-    body("avatar")
-      .optional()
-], updateUserProfile)
 
 // change password
 router.put("/change-password", auth, [

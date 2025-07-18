@@ -3,19 +3,25 @@ import User from "../models/User"
 import Blog from "../models/Blog"
 import Comment from "../models/Comment"
 import { validationResult } from "express-validator"
+import {
+  processAvatar,
+  deleteFromCloudinary,
+  deleteOldMedia
+} from "../utils/upload"
 
 //generate token
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE
-  }) // .env file --> JWT_SECRET
+    expiresIn: process.env.JWT_EXPIRY
+  })
 }
 
 export const register = async (req, res) => {
   try {
-    const errors = validationResult(req)
+    const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
+        success: false,
         errors: errors.array()
       })
     }
@@ -24,39 +30,69 @@ export const register = async (req, res) => {
 
     //check if user already exists
     const existingUser = await User.findOne({
-      $or: [{ email }, { username }]
+      $or: [
+        { email: email.toLowerCase() },
+        { username: username.toLowerCase() }
+      ]
     })
     if (existingUser) {
       return res.status(400).json({
+        success: false,
         message: "User already exists with this email or username"
       })
     }
 
+    // Handle avatar upload during registration
+    let avatarData = null
+    if (req.file) {
+      try {
+        avatarData = await processAvatar(req.file)
+      } catch (uploadError) {
+        return res.status(400).json({
+          success: false,
+          message: "Error uploading avatar",
+          error: uploadError.message
+        })
+      }
+    }
+
     //create user
     const user = await User.create({
-      username,
-      email,
+      username: username.toLowerCase(),
+      email: email.toLowerCase(),
       password,
-      fullName
+      fullName,
+      avatar: avatarData
     })
 
     const token = generateToken(user._id)
 
-    res.status(200).json({
+    res.status(201).json({
       success: true,
       token,
+      message: "User registered successfully",
       user: {
         id: user._id,
         username: user.username,
         email: user.email,
-        password: user.password,
         fullName: user.fullName,
-        avatar: user.avatar
+        avatar: user.avatar,
+        bio: user.bio,
+        followerCount: user.followerCount,
+        followingCount: user.followingCount
       }
     })
-  } 
-  catch (error) {
+  } catch (error) {
+    if (req.file && avatarData) {
+      try {
+        await deleteFromCloudinary(avatarData.public_id, "image")
+      } catch (cleanupError) {
+        console.error("Error cleaning up uploaded avatar:", cleanupError)
+      }
+    }
+
     res.status(500).json({
+      success: false,
       message: "server error",
       error: error.message
     })
@@ -65,27 +101,29 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
-    const errors = validationResult(req);
+    const errors = validationResult(req)
     if (!errors.isEmpty()) {
       return res.status(400).json({
-        errors: errors.array(),
+        success: false,
+        errors: errors.array()
       })
     }
 
-    const { username, email, password } = req.body;
+    const { username, email, password } = req.body
 
     //find user through email and username
     const user = await User.findOne({
       $or: [
-        { username: username?.toLowerCase() }, 
+        { username: username?.toLowerCase() },
         { email: email?.toLowerCase() }
       ]
-    }).select("+password");
+    }).select("+password")
 
-    if(!user || !(await user.comparePassword(password))) {
-        return res.status(401).json({
-            message: "Invalid credentials"
-        })
+    if (!user || !(await user.comparePassword(password))) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials"
+      })
     }
 
     user.lastLogin = new Date()
@@ -96,74 +134,43 @@ export const login = async (req, res) => {
     res.status(200).json({
       success: true,
       token,
+      message: "Login successful",
       user: {
         id: user._id,
         username: user.username,
         email: user.email,
         fullName: user.fullName,
-        avatar: user.avatar
+        avatar: user.avatar,
+        bio: user.bio,
+        followerCount: user.followerCount,
+        followingCount: user.followingCount
       }
     })
-  } 
-  catch (error) {
+  } catch (error) {
     res.status(500).json({
+      success: false,
       message: "server error",
-      error: error.message,
-    });
+      error: error.message
+    })
   }
 }
 
 export const getUser = async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id)
-        .populate("followers", "username fullName avatar")
-        .populate("following", "username fullName avatar")
-
-        res.status(200).json({
-            success: true,
-            user
-        })
-    } catch (error) {
-        res.status(500).json({
-            message: "server error", error: error.message
-        })
-    }
-}
-
-export const updateUserProfile = async (req, res) => {
   try {
-    const errors = validationResult(req)
-    if(!errors.isEmpty()){
-      return res.status(400).json({
-        success: false,
-        errors: errors.array()
-      })
-    }
-
-    const { username, fullName, bio, avatar } = req.body
     const user = await User.findById(req.user.id)
+      .populate("followers", "username fullName avatar")
+      .populate("following", "username fullName avatar");
 
-    if(!user) {
+    if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found"
       })
     }
 
-    if(username !== undefined) user.username = username
-
-    if(fullName !== undefined) user.fullName = fullName
-      
-    if(bio !== undefined) user.bio = bio
-      
-    if(avatar !== undefined) user.avatar = avatar
-     
-    await user.save()
-
     res.status(200).json({
       success: true,
-      user,
-      message: "Profile updated successfully"
+      user
     })
   } catch (error) {
     res.status(500).json({
@@ -177,7 +184,7 @@ export const updateUserProfile = async (req, res) => {
 export const changePassword = async (req, res) => {
   try {
     const errors = validationResult(req)
-    if(!errors.isEmpty()){
+    if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
         errors: errors.array()
@@ -187,7 +194,7 @@ export const changePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body
     const user = await User.findById(req.user.id).select("+password")
 
-    if(!user || !(await user.comparePassword(currentPassword))) {
+    if (!user || !(await user.comparePassword(currentPassword))) {
       return res.status(401).json({
         success: false,
         message: "Current password is incorrect"
@@ -229,17 +236,50 @@ export const deleteAccount = async (req, res) => {
   try {
     const userId = req.user.id
 
-    const user = await User.findByIdAndDelete(userId)
-    if(!user) {
+    const user = await User.findById(userId)
+    if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found"
       })
     }
 
-    await Blog.deleteMany({author: userId})
+    // Delete user's avatar from Cloudinary
+    if (user.avatar && user.avatar.public_id) {
+      try {
+        await deleteFromCloudinary(user.avatar.public_id, "image")
+      } catch (deleteError) {
+        console.error("Error deleting user avatar:", deleteError)
+      }
+    }
 
-    await Comment.deleteMany({user: userId})
+    // Get all user's blogs to delete their media
+    const userBlogs = await Blog.find({ author: userId })
+
+    // Delete all media files from user's blogs
+    for (const blog of userBlogs) {
+      const mediaToDelete = []
+
+      // Collect featured image
+      if (blog.featuredImage && blog.featuredImage.public_id) {
+        mediaToDelete.push(blog.featuredImage)
+      }
+
+      // Collect media files
+      if (blog.mediaFiles && blog.mediaFiles.length > 0) {
+        mediaToDelete.push(...blog.mediaFiles)
+      }
+
+      // Delete collected media
+      if (mediaToDelete.length > 0) {
+        await deleteOldMedia(mediaToDelete)
+      }
+    }
+
+    // Delete user and related data
+    await User.findByIdAndDelete(userId)
+    await Blog.deleteMany({ author: userId })
+    await Comment.deleteMany({ user: userId })
 
     res.status(200).json({
       success: true,
