@@ -4,14 +4,13 @@ import {
     register,
     login,
     getUser,
-    updateUserProfile,
     changePassword,
     logout,
     deleteAccount,
-} from "../controllers/authController"
-import { auth, isAdmin } from "../middlewares/auth"
-import User from "../models/User"
-import { uploadAvatar, handleMulterError } from "../utils/upload"
+} from "../controllers/authController.js"
+import { auth, isAdmin } from "../middlewares/auth.js"
+import User from "../models/User.js"
+import { uploadAvatar, handleMulterError } from "../utils/upload.js"
 
 const router = express.Router()
 

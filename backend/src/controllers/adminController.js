@@ -1,7 +1,7 @@
-import User from "../models/User";
-import Blog from "../models/Blog";
-import Comment from "../models/Comment";
-import { deleteFromCloudinary, deleteOldMedia } from "../utils/upload";
+import User from "../models/User.js";
+import Blog from "../models/Blog.js";
+import Comment from "../models/Comment.js";
+import { deleteFromCloudinary, deleteOldMedia } from "../utils/upload.js";
 
 export const getUsers = async (req, res) => {
   try {

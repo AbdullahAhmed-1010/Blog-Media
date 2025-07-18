@@ -1,13 +1,13 @@
-import User from "../models/User";
-import Blog from "../models/Blog";
-import Comment from "../models/Comment";
+import User from "../models/User.js";
+import Blog from "../models/Blog.js";
+import Comment from "../models/Comment.js";
 import { validationResult } from "express-validator";
 import { 
   processImages, 
   processVideos, 
   deleteOldMedia, 
   deleteFromCloudinary 
-} from "../utils/upload";
+} from "../utils/upload.js";
 
 export const createBlog = async (req, res) => {
   try {

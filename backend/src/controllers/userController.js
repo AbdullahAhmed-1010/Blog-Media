@@ -1,6 +1,6 @@
-import User from "../models/User";
-import Blog from "../models/Blog";
-import { processAvatar, deleteFromCloudinary } from "../utils/upload";
+import User from "../models/User.js";
+import Blog from "../models/Blog.js";
+import { processAvatar, deleteFromCloudinary } from "../utils/upload.js";
 
 // get profile/:username
 export const getUserProfile = async (req, res) => {

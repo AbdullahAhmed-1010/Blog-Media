@@ -1,5 +1,5 @@
 import express from "express"
-import { auth } from "../middlewares/auth"
+import { auth } from "../middlewares/auth.js"
 import {
     getUserProfile,
     updateProfile,
@@ -10,8 +10,8 @@ import {
     searchUsers,
     getSuggestions,
     deleteAvatar
-} from "../controllers/userController"
-import {uploadAvatar, handleMulterError} from "../utils/upload"
+} from "../controllers/userController.js"
+import {uploadAvatar, handleMulterError} from "../utils/upload.js"
 
 const router = express.Router()
 

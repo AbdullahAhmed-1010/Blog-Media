@@ -5,9 +5,9 @@ import {
     getBlogs,
     deleteBlog,
     toggleUserRole
-} from "../controllers/adminController"
+} from "../controllers/adminController.js"
 
-import { auth, isAdmin } from "../middlewares/auth"
+import { auth, isAdmin } from "../middlewares/auth.js"
 
 const router = express.Router()
 

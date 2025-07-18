@@ -1,6 +1,6 @@
 import {validationResult} from "express-validator"
-import Comment from "../models/Comment"
-import Blog from "../models/Blog"
+import Comment from "../models/Comment.js"
+import Blog from "../models/Blog.js"
 
 export const createComment = async (req, res) => {
     try {

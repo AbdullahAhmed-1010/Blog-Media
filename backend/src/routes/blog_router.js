@@ -10,11 +10,11 @@ import {
     saveBlog,
     getUserSavedBlogs,
     getUserBlogs
-} from "../controllers/blogController"
-import { auth, isResourceOwner } from "../middlewares/auth"
-import { uploadMediaFiles } from "../middlewares/fileUpload"
-import Blog from "../models/Blog"
-import { handleMulterError, uploadBlogMedia } from "../utils/upload"
+} from "../controllers/blogController.js"
+import { auth, isResourceOwner } from "../middlewares/auth.js"
+import { uploadMediaFiles } from "../middlewares/fileUpload.js"
+import Blog from "../models/Blog.js"
+import { handleMulterError, uploadBlogMedia } from "../utils/upload.js"
 
 const router = express.Router()
 

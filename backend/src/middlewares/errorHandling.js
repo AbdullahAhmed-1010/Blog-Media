@@ -1,85 +1,58 @@
-const errorHandling = async (error, req, res, next) => {
-  let error = { ...error }
-  error.message = error.message
+const errorHandling = (err, req, res, next) => {
+  let error = { ...err };
+  error.message = err.message || "Internal Server Error";
+  error.statusCode = err.statusCode || 500;
 
-  // log error
-  console.error(error)
+  // Log the original error
+  console.error("Error log:", err);
 
-  // mongoose bad objectId
-  if (error.name === "castError") {
-    const message = "resource not found"
-    error = {
-      message,
-      statusCode: 404
-    }
+  // Mongoose bad ObjectId
+  if (err.name === "CastError") {
+    error.message = "Resource not found";
+    error.statusCode = 404;
   }
 
-  // mongoose duplicate key
-  if (error.code === 11000) {
-    const message = "duplicate field value entered"
-    error = {
-      message,
-      statusCode: 400
-    }
+  // Mongoose duplicate key
+  if (err.code === 11000) {
+    error.message = "Duplicate field value entered";
+    error.statusCode = 400;
   }
 
-  // mongoose validation error
-  if (error.name === "validationError") {
-    const message = Object.values(error.errors)
+  // Mongoose validation error
+  if (err.name === "ValidationError") {
+    error.message = Object.values(err.errors)
       .map((val) => val.message)
-      .join(", ")
-    error = {
-      message,
-      statusCode: 400
-    }
+      .join(", ");
+    error.statusCode = 400;
   }
 
   // JWT errors
-  if (error.name === "JsonWebTokenError") {
-    const message = "invalid token"
-    error = {
-      message,
-      statusCode: 401
-    }
-  }
-  if (error.name === "TokenExpiredError") {
-    const message = "token expired"
-    error = {
-      message,
-      statusCode: 401
-    }
+  if (err.name === "JsonWebTokenError") {
+    error.message = "Invalid token";
+    error.statusCode = 401;
   }
 
-  // multer errors
-  if(error.code === "LIMIT_FILE_SIZE") {
-    const message = "file size too large"
-    error = {
-        message,
-        statusCode: 400
-    }
-  }
-  if(error.code === "LIMIT_FILE_COUNT") {
-    const message = "too many files to handle"
-    error = {
-        message,
-        statusCode: 400
-    }
+  if (err.name === "TokenExpiredError") {
+    error.message = "Token expired";
+    error.statusCode = 401;
   }
 
-  // server error
-  res.status(error.statusCode || 500).json({
+  // Multer errors
+  if (err.code === "LIMIT_FILE_SIZE") {
+    error.message = "File size too large";
+    error.statusCode = 400;
+  }
+
+  if (err.code === "LIMIT_FILE_COUNT") {
+    error.message = "Too many files to handle";
+    error.statusCode = 400;
+  }
+
+  // Final error response
+  res.status(error.statusCode).json({
     success: false,
-    message: "server error",
-    error: error.message
-  })
-}
+    message: error.message,
+  });
+};
 
-// handle unhandled promise rejections
-process.on("unhandledRejection", (error, promise) => {
-    console.log(`error: ${error.message}`)
-    server.close(() => {
-        process.exit(1)
-    })
-})
-
-export default errorHandling
+export default errorHandling;

@@ -1,7 +1,7 @@
 import express from "express"
 import { body } from "express-validator"
-import { createComment } from "../controllers/commentController"
-import { auth } from "../middlewares/auth"
+import { createComment } from "../controllers/commentController.js"
+import { auth } from "../middlewares/auth.js"
 
 const router = express.Router()
 

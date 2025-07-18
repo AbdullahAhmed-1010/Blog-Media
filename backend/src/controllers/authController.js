@@ -1,13 +1,13 @@
 import jwt from "jsonwebtoken"
-import User from "../models/User"
-import Blog from "../models/Blog"
-import Comment from "../models/Comment"
+import User from "../models/User.js"
+import Blog from "../models/Blog.js"
+import Comment from "../models/Comment.js"
 import { validationResult } from "express-validator"
 import {
   processAvatar,
   deleteFromCloudinary,
   deleteOldMedia
-} from "../utils/upload"
+} from "../utils/upload.js"
 
 //generate token
 const generateToken = (id) => {
