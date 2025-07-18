@@ -1,250 +1,202 @@
-const multer = require('multer');
-const cloudinary = require('cloudinary').v2;
-const path = require('path');
+import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
 
-// Configure Cloudinary
+// cloudinary config
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Multer configuration for memory storage
+// multer memory storage
 const storage = multer.memoryStorage();
 
-// File filter function
+// File filter
 const fileFilter = (req, file, cb) => {
-    
-  // Check file type
-  if (file.fieldname === 'images') {
-    // Accept only image files
-    if (file.mimetype.startsWith('image/')) {
+  const { fieldname, mimetype } = file;
+
+  if (["featuredImage", "mediaFiles"].includes(fieldname)) {
+    if (mimetype.startsWith("image/") || mimetype.startsWith("video/")) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed for images field'), false);
+      cb(new Error("only image or video files allowed for blog media"), false);
     }
-  } else if (file.fieldname === 'videos') {
-    // Accept only video files
-    if (file.mimetype.startsWith('video/')) {
+  } else if (fieldname === "avatar") {
+    if (mimetype.startsWith("image/")) {
       cb(null, true);
     } else {
-      cb(new Error('Only video files are allowed for videos field'), false);
-    }
-  } else if (file.fieldname === 'profilePicture') {
-    // Accept only image files for profile picture
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed for profile picture'), false);
+      cb(new Error("only image files are allowed for avatar"), false);
     }
   } else {
-    cb(new Error('Invalid field name'), false);
+    cb(new Error("invalid field name"), false);
   }
 };
 
-// Create multer upload instance
 const upload = multer({
-  storage: storage,
+  storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-    files: 10 // Maximum 10 files
+    fileSize: 15 * 1024 * 1024, 
+    files: 10,
   },
-  fileFilter: fileFilter
+  fileFilter,
 });
 
-// Upload multiple files (images and videos)
-const uploadBlogMedia = upload.fields([
-  { name: 'images', maxCount: 5 },
-  { name: 'videos', maxCount: 3 }
+export const uploadBlogMedia = upload.fields([
+  { name: "featuredImage", maxCount: 1 },
+  { name: "mediaFiles", maxCount: 10 },
 ]);
 
-// Upload single profile picture
-const uploadProfilePicture = upload.single('profilePicture');
+export const uploadAvatar = upload.single("avatar");
 
-// Function to upload buffer to Cloudinary
-const uploadToCloudinary = (buffer, options = {}) => {
+// Upload to Cloudinary
+export const uploadToCloudinary = (buffer, options = {}) => {
   return new Promise((resolve, reject) => {
     const uploadOptions = {
-      resource_type: 'auto',
-      folder: 'social-blog',
-      ...options
+      resource_type: "auto",
+      folder: "social-blog",
+      ...options,
     };
 
-    cloudinary.uploader.upload_stream(
+    const stream = cloudinary.uploader.upload_stream(
       uploadOptions,
       (error, result) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve(result);
-        }
-      }
-    ).end(buffer);
-  });
-};
-
-// Function to delete file from Cloudinary
-const deleteFromCloudinary = (publicId, resourceType = 'image') => {
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader.destroy(publicId, { resource_type: resourceType }, (error, result) => {
-      if (error) {
-        reject(error);
-      } else {
+        if (error) return reject(error);
         resolve(result);
       }
-    });
+    );
+
+    stream.end(buffer);
   });
 };
 
-// Function to process uploaded images
-const processImages = async (imageFiles) => {
-  if (!imageFiles || imageFiles.length === 0) {
-    return [];
-  }
+// Delete from Cloudinary
+export const deleteFromCloudinary = (publicId, resourceType = "image") => {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.destroy(
+      publicId,
+      { resource_type: resourceType },
+      (err, result) => {
+        if (err) return reject(err);
+        resolve(result);
+      }
+    );
+  });
+};
+
+// Process blog images
+export const processImages = async (imageFiles) => {
+  if (!imageFiles || imageFiles.length === 0) return [];
 
   const imagePromises = imageFiles.map(async (file) => {
-    try {
-      const result = await uploadToCloudinary(file.buffer, {
-        folder: 'social-blog/images',
-        resource_type: 'image',
-        transformation: [
-          { width: 800, height: 600, crop: 'limit' },
-          { quality: 'auto' },
-          { format: 'auto' }
-        ]
-      });
+    const result = await uploadToCloudinary(file.buffer, {
+      folder: "social-blog/images",
+      resource_type: "image",
+      transformation: [
+        { width: 800, height: 600, crop: "limit" },
+        { quality: "auto" },
+        { format: "auto" },
+      ],
+    });
 
-      return {
-        url: result.secure_url,
-        public_id: result.public_id,
-        alt: file.originalname
-      };
-    } catch (error) {
-      console.error('Image upload error:', error);
-      throw new Error(`Failed to upload image: ${file.originalname}`);
-    }
+    return {
+      url: result.secure_url,
+      public_id: result.public_id,
+      alt: file.originalname,
+    };
   });
 
   return Promise.all(imagePromises);
 };
 
-// Function to process uploaded videos
-const processVideos = async (videoFiles) => {
-  if (!videoFiles || videoFiles.length === 0) {
-    return [];
-  }
+// Process blog videos
+export const processVideos = async (videoFiles) => {
+  if (!videoFiles || videoFiles.length === 0) return [];
 
   const videoPromises = videoFiles.map(async (file) => {
-    try {
-      const result = await uploadToCloudinary(file.buffer, {
-        folder: 'social-blog/videos',
-        resource_type: 'video',
-        transformation: [
-          { width: 720, height: 480, crop: 'limit' },
-          { quality: 'auto' },
-          { format: 'mp4' }
-        ]
-      });
+    const result = await uploadToCloudinary(file.buffer, {
+      folder: "social-blog/videos",
+      resource_type: "video",
+      transformation: [
+        { width: 720, height: 480, crop: "limit" },
+        { quality: "auto" },
+        { format: "mp4" },
+      ],
+    });
 
-      return {
-        url: result.secure_url,
-        public_id: result.public_id,
-        thumbnail: result.secure_url.replace('/upload/', '/upload/so_0/')
-      };
-    } catch (error) {
-      console.error('Video upload error:', error);
-      throw new Error(`Failed to upload video: ${file.originalname}`);
-    }
+    return {
+      url: result.secure_url,
+      public_id: result.public_id,
+      thumbnail: result.secure_url.replace("/upload/", "/upload/so_0/"),
+    };
   });
 
   return Promise.all(videoPromises);
 };
 
-// Function to process profile picture
-const processProfilePicture = async (imageFile) => {
-  if (!imageFile) {
-    return null;
-  }
+// Process avatar image
+export const processAvatar = async (imageFile) => {
+  if (!imageFile) return null;
 
-  try {
-    const result = await uploadToCloudinary(imageFile.buffer, {
-      folder: 'social-blog/profiles',
-      resource_type: 'image',
-      transformation: [
-        { width: 300, height: 300, crop: 'fill', gravity: 'face' },
-        { quality: 'auto' },
-        { format: 'auto' }
-      ]
-    });
+  const result = await uploadToCloudinary(imageFile.buffer, {
+    folder: "social-blog/avatars",
+    resource_type: "image",
+    transformation: [
+      { width: 300, height: 300, crop: "fill", gravity: "face" },
+      { quality: "auto" },
+      { format: "auto" },
+    ],
+  });
 
-    return {
-      url: result.secure_url,
-      public_id: result.public_id
-    };
-  } catch (error) {
-    console.error('Profile picture upload error:', error);
-    throw new Error('Failed to upload profile picture');
-  }
+  return {
+    url: result.secure_url,
+    public_id: result.public_id,
+  };
 };
 
-// Function to delete old media files
-const deleteOldMedia = async (mediaArray) => {
-  if (!mediaArray || mediaArray.length === 0) {
-    return;
-  }
+// Delete old media
+export const deleteOldMedia = async (mediaArray) => {
+  if (!mediaArray || mediaArray.length === 0) return;
 
   const deletePromises = mediaArray.map(async (media) => {
     try {
-      // Determine resource type based on URL or public_id
-      const resourceType = media.url.includes('/video/') ? 'video' : 'image';
+      const resourceType = media.url.includes("/video/") ? "video" : "image";
       await deleteFromCloudinary(media.public_id, resourceType);
-    } catch (error) {
-      console.error('Delete media error:', error);
-      // Don't throw error, just log it
+    } catch (err) {
+      console.error("failed to delete:", err.message);
     }
   });
 
   await Promise.allSettled(deletePromises);
 };
 
-// Error handling middleware for multer
-const handleMulterError = (err, req, res, next) => {
+// Handle multer errors
+export const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
+    if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
         success: false,
-        message: 'File too large. Maximum size is 10MB.'
+        message: "File too large. Max size is 15MB.",
       });
     }
-    if (err.code === 'LIMIT_FILE_COUNT') {
-      return res.status(400).json({
-        success: false,
-        message: 'Too many files. Maximum is 10 files.'
-      });
-    }
-    return res.status(400).json({
-      success: false,
-      message: 'File upload error: ' + err.message
-    });
-  }
-  
-  if (err.message.includes('Only')) {
-    return res.status(400).json({
-      success: false,
-      message: err.message
-    });
-  }
-  
-  next(err);
-};
 
-module.exports = {
-  uploadBlogMedia,
-  uploadProfilePicture,
-  processImages,
-  processVideos,
-  processProfilePicture,
-  deleteOldMedia,
-  handleMulterError,
-  cloudinary
+    if (err.code === "LIMIT_FILE_COUNT") {
+      return res.status(400).json({
+        success: false,
+        message: "Too many files. Max is 10.",
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: "Upload error: " + err.message,
+    });
+  }
+
+  if (err.message?.includes("Only")) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+  next(err);
 };
