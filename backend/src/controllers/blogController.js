@@ -2,18 +2,61 @@ import User from "../models/User";
 import Blog from "../models/Blog";
 import Comment from "../models/Comment";
 import { validationResult } from "express-validator";
+import { 
+  processImages, 
+  processVideos, 
+  deleteOldMedia, 
+  deleteFromCloudinary 
+} from "../utils/upload";
 
 export const createBlog = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
+        success: false,
         errors: errors.array(),
       });
     }
 
     const { title, content, excerpt, tags, category } = req.body;
-    const mediaFiles = req.files ? req.files.map((file) => file.path) : [];
+    
+    let featuredImage = null;
+    let mediaFiles = [];
+
+    // Process uploaded files
+    if (req.files) {
+      try {
+        // Process featured image
+        if (req.files.featuredImage && req.files.featuredImage.length > 0) {
+          const processedImages = await processImages(req.files.featuredImage);
+          featuredImage = processedImages[0];
+        }
+
+        // Process media files (images and videos)
+        if (req.files.mediaFiles && req.files.mediaFiles.length > 0) {
+          const imageFiles = req.files.mediaFiles.filter(file => 
+            file.mimetype.startsWith('image/')
+          );
+          const videoFiles = req.files.mediaFiles.filter(file => 
+            file.mimetype.startsWith('video/')
+          );
+
+          const [processedImages, processedVideos] = await Promise.all([
+            processImages(imageFiles),
+            processVideos(videoFiles)
+          ]);
+
+          mediaFiles = [...processedImages, ...processedVideos];
+        }
+      } catch (uploadError) {
+        return res.status(400).json({
+          success: false,
+          message: "Error uploading media files",
+          error: uploadError.message
+        });
+      }
+    }
 
     const blog = await Blog.create({
       title,
@@ -22,20 +65,31 @@ export const createBlog = async (req, res) => {
       author: req.user.id,
       tags: tags ? tags.split(",").map((tag) => tag.trim()) : [],
       category,
+      featuredImage,
       mediaFiles,
-      featuredmage: mediaFiles[0] || "",
     });
-
-    await blog.save();
 
     await blog.populate("author", "username fullName avatar");
 
-    res.status(200).json({
+    res.status(201).json({
       success: true,
+      message: "Blog created successfully",
       blog,
     });
   } catch (error) {
+    // Clean up uploaded files if blog creation fails
+    if (req.files) {
+      const allMedia = [];
+      if (featuredImage) allMedia.push(featuredImage);
+      if (mediaFiles.length > 0) allMedia.push(...mediaFiles);
+      
+      if (allMedia.length > 0) {
+        await deleteOldMedia(allMedia);
+      }
+    }
+
     res.status(500).json({
+      success: false,
       message: "server error",
       error: error.message,
     });
@@ -47,7 +101,7 @@ export const getAllBlogs = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    const sort = "recent";
+    const sort = req.query.sort || "recent";
 
     let sortOptions = {};
     switch (sort) {
@@ -112,12 +166,16 @@ export const getAllBlogs = async (req, res) => {
     res.status(200).json({
       success: true,
       blogs,
-      currentPage: page,
-      totalPage: Math.ceil(total / limit),
-      totalBlogs: total,
+      pagination: {
+        currentPage: page,
+        totalPage: Math.ceil(total / limit),
+        totalBlogs: total,
+        limit
+      }
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
       message: "server error",
       error: error.message,
     });
@@ -132,6 +190,7 @@ export const getBlog = async (req, res) => {
 
     if (!blog) {
       return res.status(404).json({
+        success: false,
         message: "Blog not found",
       });
     }
@@ -153,6 +212,7 @@ export const getBlog = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
       message: "server error",
       error: error.message,
     });
@@ -164,20 +224,71 @@ export const updateBlog = async (req, res) => {
     const blog = await Blog.findOne({ slug: req.params.slug });
     if (!blog) {
       return res.status(404).json({
+        success: false,
         message: "Blog not found",
       });
     }
 
     if (blog.author.toString() !== req.user.id) {
       return res.status(403).json({
+        success: false,
         message: "Not authorized to update this blog",
       });
     }
 
     const { title, content, excerpt, tags, category } = req.body;
-    const mediaFiles = req.files
-      ? req.files.map((file) => file.path)
-      : blog.mediaFiles;
+    
+    let featuredImage = blog.featuredImage;
+    let mediaFiles = blog.mediaFiles;
+
+    // Process uploaded files
+    if (req.files) {
+      try {
+        // Process new featured image
+        if (req.files.featuredImage && req.files.featuredImage.length > 0) {
+          // Delete old featured image directly
+          if (blog.featuredImage && blog.featuredImage.public_id) {
+            await deleteFromCloudinary(blog.featuredImage.public_id, "image");
+          }
+          
+          const processedImages = await processImages(req.files.featuredImage);
+          featuredImage = processedImages[0];
+        }
+
+        // Process new media files
+        if (req.files.mediaFiles && req.files.mediaFiles.length > 0) {
+          // Delete old media files
+          if (blog.mediaFiles && blog.mediaFiles.length > 0) {
+            for (const media of blog.mediaFiles) {
+              if (media.public_id) {
+                const resourceType = media.url.includes("/video/") ? "video" : "image";
+                await deleteFromCloudinary(media.public_id, resourceType);
+              }
+            }
+          }
+
+          const imageFiles = req.files.mediaFiles.filter(file => 
+            file.mimetype.startsWith('image/')
+          );
+          const videoFiles = req.files.mediaFiles.filter(file => 
+            file.mimetype.startsWith('video/')
+          );
+
+          const [processedImages, processedVideos] = await Promise.all([
+            processImages(imageFiles),
+            processVideos(videoFiles)
+          ]);
+
+          mediaFiles = [...processedImages, ...processedVideos];
+        }
+      } catch (uploadError) {
+        return res.status(400).json({
+          success: false,
+          message: "Error uploading media files",
+          error: uploadError.message
+        });
+      }
+    }
 
     const updatedBlog = await Blog.findByIdAndUpdate(
       blog._id,
@@ -187,18 +298,21 @@ export const updateBlog = async (req, res) => {
         excerpt: excerpt || blog.excerpt,
         tags: tags ? tags.split(",").map((tag) => tag.trim()) : blog.tags,
         category: category || blog.category,
+        featuredImage,
         mediaFiles,
-        featuredmage: mediaFiles[0] || blog.featuredmage,
+        updatedAt: new Date()
       },
       { new: true, runValidators: true }
     ).populate("author", "username fullName avatar");
 
     res.status(200).json({
       success: true,
+      message: "Blog updated successfully",
       blog: updatedBlog,
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
       message: "server error",
       error: error.message,
     });
@@ -210,16 +324,42 @@ export const deleteBlog = async (req, res) => {
     const blog = await Blog.findOne({ slug: req.params.slug });
     if (!blog) {
       return res.status(404).json({
+        success: false,
         message: "Blog not found",
       });
     }
 
     if (blog.author.toString() !== req.user.id) {
       return res.status(403).json({
+        success: false,
         message: "Not authorized to delete the blog",
       });
     }
 
+    // Delete featured image
+    if (blog.featuredImage && blog.featuredImage.public_id) {
+      try {
+        await deleteFromCloudinary(blog.featuredImage.public_id, "image");
+      } catch (deleteError) {
+        console.error("Error deleting featured image:", deleteError);
+      }
+    }
+
+    // Delete media files
+    if (blog.mediaFiles && blog.mediaFiles.length > 0) {
+      for (const media of blog.mediaFiles) {
+        if (media.public_id) {
+          try {
+            const resourceType = media.url.includes("/video/") ? "video" : "image";
+            await deleteFromCloudinary(media.public_id, resourceType);
+          } catch (deleteError) {
+            console.error("Error deleting media file:", deleteError);
+          }
+        }
+      }
+    }
+
+    // Delete blog and comments
     await Blog.findByIdAndDelete(blog._id);
     await Comment.deleteMany({ blog: blog._id });
 
@@ -229,6 +369,7 @@ export const deleteBlog = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
       message: "server error",
       error: error.message,
     });
@@ -240,13 +381,14 @@ export const likeBlog = async (req, res) => {
     const blog = await Blog.findOne({ slug: req.params.slug });
     if (!blog) {
       return res.status(404).json({
+        success: false,
         message: "Blog not found",
       });
     }
 
     const isLiked = blog.likes.includes(req.user._id);
     if (isLiked) {
-      blog.likes = blog.likes.filter((id) => id.toString() !== req.user._id);
+      blog.likes = blog.likes.filter((id) => id.toString() !== req.user._id.toString());
     } else {
       blog.likes.push(req.user._id);
     }
@@ -263,6 +405,7 @@ export const likeBlog = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
       message: "server error",
       error: error.message,
     });
@@ -274,6 +417,7 @@ export const saveBlog = async (req, res) => {
     const blog = await Blog.findOne({ slug: req.params.slug });
     if (!blog) {
       return res.status(404).json({
+        success: false,
         message: "Blog not found",
       });
     }
@@ -282,12 +426,14 @@ export const saveBlog = async (req, res) => {
     const isSaved = user.savedBlogs.includes(blog._id);
 
     if (isSaved) {
-      user.savedBlogs.push(blog._id);
-    } else {
       user.savedBlogs.pull(blog._id);
+      blog.savedBy.pull(req.user._id);
+    } else {
+      user.savedBlogs.push(blog._id);
+      blog.savedBy.push(req.user._id);
     }
 
-    await user.save();
+    await Promise.all([user.save(), blog.save()]);
 
     res.status(200).json({
       success: true,
@@ -296,13 +442,14 @@ export const saveBlog = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
       message: "server error",
       error: error.message,
     });
   }
 };
 
-export const userSavedBlog = async (req, res) => {
+export const getUserSavedBlogs = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
@@ -313,18 +460,58 @@ export const userSavedBlog = async (req, res) => {
     })
       .populate("author", "username fullName avatar")
       .sort({ createdAt: -1 })
-      .skip(skip);
-    limit(parseInt(limit));
+      .skip(skip)
+      .limit(parseInt(limit));
 
+    // Add like/save status for authenticated user
     blogs.forEach((blog) => {
-      (blog.isLiked = blog.isLiked.includes(req.user._id)),
-        (blog.isSaved = true);
+      blog.isLiked = blog.likes.includes(req.user._id);
+      blog.isSaved = true;
     });
 
     const total = await Blog.countDocuments({
       savedBy: req.user._id,
       status: "published",
     });
+
+    res.status(200).json({
+      success: true,
+      blogs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "server error",
+      error: error.message,
+    });
+  }
+};
+
+export const getUserBlogs = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status = "all" } = req.query;
+    
+    const skip = (page - 1) * limit;
+
+    let query = { author: req.user.id };
+    
+    if (status !== "all") {
+      query.status = status;
+    }
+
+    const blogs = await Blog.find(query)
+      .populate("author", "username fullName avatar")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Blog.countDocuments(query);
 
     res.status(200).json({
       success: true,
