@@ -117,6 +117,7 @@ blogSchema.methods.isSavedBy = function(userId) {
 
 // to get trending blogs
 blogSchema.statics.getTrending = function(limit = 10) {
+    
   return this.find({ isPublished: true })
     .populate("author", "username fullName profilePicture")
     .sort({ views: -1, createdAt: -1 })
