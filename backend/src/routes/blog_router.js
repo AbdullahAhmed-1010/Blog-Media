@@ -18,7 +18,7 @@ import { handleMulterError, uploadBlogMedia } from "../utils/upload.js"
 
 const router = express.Router()
 
-router.post("/", auth, uploadBlogMedia, handleMulterError, uploadMediaFiles.array("mediaFiles"), [
+router.post("/", auth, uploadBlogMedia, handleMulterError, [
     body("title")
       .trim()
       .isLength({min: 1, max: 255})
@@ -42,7 +42,7 @@ router.post("/", auth, uploadBlogMedia, handleMulterError, uploadMediaFiles.arra
 
 router.get("/", getAllBlogs)
 router.get("/:slug", getBlog)
-router.put("/update/:id", auth, uploadBlogMedia, handleMulterError, uploadMediaFiles.array("mediaFiles"), isResourceOwner(Blog), updateBlog)
+router.put("/update/:id", auth, uploadBlogMedia, handleMulterError, isResourceOwner(Blog), updateBlog)
 router.delete("/delete/:id", auth, isResourceOwner(Blog), deleteBlog)
 router.post("/:id/like", auth, likeBlog)
 router.post("/:id/save", auth, saveBlog)

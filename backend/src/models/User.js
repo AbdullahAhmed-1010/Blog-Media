@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { bcrypt } from "bcryptjs";
+import bcrypt from "bcryptjs";
 
 const userSchema = new mongoose.Schema({
   username: {
@@ -119,10 +119,5 @@ userSchema.methods.getPublicProfile = function() {
   delete userObject.email
   return userObject
 }
-
-// indexing for better query performance
-userSchema.index({ username: 1 })
-userSchema.index({ email: 1 })
-userSchema.index({ createdAt: -1 })
 
 export default mongoose.model("User", userSchema)

@@ -126,7 +126,6 @@ blogSchema.statics.getTrending = function(limit = 10) {
 
 // indexing for better query performance
 blogSchema.index({ author: 1, createdAt: -1 });
-blogSchema.index({ slug: 1 });
 blogSchema.index({ tags: 1 });
 blogSchema.index({ createdAt: -1 });
 blogSchema.index({ views: -1 });

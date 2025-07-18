@@ -5,14 +5,14 @@ import connectDB from "./src/config/database.js"
 
 import { corsMiddleware, handlePreFlight } from "./src/middlewares/cors.js"
 import { generalLimiter } from "./src/middlewares/rateLimit.js"
-import { handleSecurity } from "./src/middlewares/security.js"
-import { errorHandling } from "./src/middlewares/errorHandling.js"
+import handleSecurity from "./src/middlewares/security.js"
+import errorHandling from "./src/middlewares/errorHandling.js"
 
-import { admin_router } from "./src/routes/admin_router.js"
-import { auth_router } from "./src/routes/auth_router.js"
-import { blog_router } from "./src/routes/blog_router.js"
-import { comment_router } from "./src/routes/comment_router.js"
-import { user_router } from "./src/routes/user_router.js"
+import admin_router from "./src/routes/admin_router.js"
+import auth_router from "./src/routes/auth_router.js"
+import blog_router from "./src/routes/blog_router.js"
+import comment_router from "./src/routes/comment_router.js"
+import user_router from "./src/routes/user_router.js"
 
 dotenv.config()
 const app = express()
