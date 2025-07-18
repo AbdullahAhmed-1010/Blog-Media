@@ -1,5 +1,6 @@
 import User from "../models/User";
 import Blog from "../models/Blog";
+import { processAvatar, deleteFromCloudinary } from "../utils/upload";
 
 // get profile/:username
 export const getUserProfile = async (req, res) => {
@@ -31,7 +32,7 @@ export const getUserProfile = async (req, res) => {
           fullName: user.fullName,
           avatar: user.avatar,
           followerCount: user.followerCount,
-          followingCount: user.followerCount,
+          followingCount: user.followingCount,
         },
       });
     }
@@ -56,6 +57,124 @@ export const getUserProfile = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "server error fetching user profile",
+      error: error.message,
+    });
+  }
+};
+
+// PUT /update-profile - Update user profile with avatar upload
+export const updateProfile = async (req, res) => {
+  try {
+    const { fullName, bio, username } = req.body;
+    const userId = req.user._id;
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Check if username is being changed and if it's already taken
+    if (username && username.toLowerCase() !== user.username.toLowerCase()) {
+      const existingUser = await User.findOne({
+        username: username.toLowerCase(),
+        _id: { $ne: userId },
+      });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: "Username already taken",
+        });
+      }
+    }
+
+    // Handle avatar upload
+    let avatarData = null;
+    if (req.file) {
+      try {
+        // Delete old avatar if it exists
+        if (user.avatar && user.avatar.public_id) {
+          await deleteFromCloudinary(user.avatar.public_id, "image");
+        }
+
+        // Upload new avatar
+        avatarData = await processAvatar(req.file);
+      } catch (uploadError) {
+        return res.status(400).json({
+          success: false,
+          message: "Error uploading avatar",
+          error: uploadError.message,
+        });
+      }
+    }
+
+    // Update user fields
+    const updateData = {};
+    if (fullName) updateData.fullName = fullName;
+    if (bio) updateData.bio = bio;
+    if (username) updateData.username = username.toLowerCase();
+    if (avatarData) updateData.avatar = avatarData;
+
+    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+      new: true,
+      runValidators: true,
+    }).select("-password");
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user: updatedUser,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error updating profile",
+      error: error.message,
+    });
+  }
+};
+
+// DELETE /delete-avatar - Delete user avatar
+export const deleteAvatar = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Delete avatar from Cloudinary if it exists
+    if (user.avatar && user.avatar.public_id) {
+      try {
+        await deleteFromCloudinary(user.avatar.public_id, "image");
+      } catch (deleteError) {
+        console.error("Error deleting avatar from Cloudinary:", deleteError);
+      }
+    }
+
+    // Remove avatar from user document
+    user.avatar = null;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Avatar deleted successfully",
+      user: {
+        ...user.toObject(),
+        avatar: null,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error deleting avatar",
       error: error.message,
     });
   }
@@ -94,8 +213,11 @@ export const followUser = async (req, res) => {
     currentUser.following.push(userId);
     userToFollow.followers.push(currentUserId);
 
-    await currentUser.save();
-    await userToFollow.save();
+    // Update counts
+    currentUser.followingCount = currentUser.following.length;
+    userToFollow.followerCount = userToFollow.followers.length;
+
+    await Promise.all([currentUser.save(), userToFollow.save()]);
 
     res.status(200).json({
       success: true,
@@ -151,11 +273,14 @@ export const unfollowUser = async (req, res) => {
       (id) => id.toString() !== userId
     );
     userToUnfollow.followers = userToUnfollow.followers.filter(
-      (id) => id.toString() !== currentUserId
+      (id) => id.toString() !== currentUserId.toString()
     );
 
-    await currentUser.save();
-    await userToUnfollow.save();
+    // Update counts
+    currentUser.followingCount = currentUser.following.length;
+    userToUnfollow.followerCount = userToUnfollow.followers.length;
+
+    await Promise.all([currentUser.save(), userToUnfollow.save()]);
 
     res.json({
       success: true,
@@ -172,7 +297,7 @@ export const unfollowUser = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "server erorr unfollowing user",
+      message: "server error unfollowing user",
       error: error.message,
     });
   }
@@ -209,7 +334,7 @@ export const getFollowers = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      mesage: "server error fetching followers",
+      message: "server error fetching followers",
       error: error.message,
     });
   }
@@ -230,7 +355,7 @@ export const getFollowing = async (req, res) => {
       },
     });
     if (!user) {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
         message: "user not found",
       });
@@ -247,7 +372,7 @@ export const getFollowing = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "server error fetching followings",
-      error: error.mesage,
+      error: error.message,
     });
   }
 };
@@ -257,7 +382,7 @@ export const searchUsers = async (req, res) => {
   try {
     const { q, page = 1, limit = 20 } = req.query;
 
-    if (!q || (q.trim().length < 2)) {
+    if (!q || q.trim().length < 2) {
       return res.status(400).json({
         success: false,
         message: "Search query is too short",
@@ -273,16 +398,14 @@ export const searchUsers = async (req, res) => {
       .skip((+page - 1) * +limit)
       .limit(+limit)
       .sort({ followerCount: -1 })
-      .lean(); 
+      .lean();
 
     let usersWithFollowStatus = users;
 
     if (req.user) {
       const currentUser = await User.findById(req.user._id).select("following");
 
-      const followingIds = currentUser?.following.map((id) =>
-        id.toString()
-      );
+      const followingIds = currentUser?.following.map((id) => id.toString());
 
       usersWithFollowStatus = users.map((user) => ({
         ...user,
@@ -320,8 +443,8 @@ export const getSuggestions = async (req, res) => {
       .limit(parseInt(limit));
 
     res.status(200).json({
-        success: true,
-        suggestions
+      success: true,
+      suggestions,
     });
   } catch (error) {
     res.status(500).json({

@@ -2,17 +2,22 @@ import express from "express"
 import { auth } from "../middlewares/auth"
 import {
     getUserProfile,
+    updateProfile,
     followUser,
     unfollowUser,
     getFollowers,
     getFollowing,
     searchUsers,
-    getSuggestions
+    getSuggestions,
+    deleteAvatar
 } from "../controllers/userController"
+import {uploadAvatar, handleMulterError} from "../utils/upload"
 
 const router = express.Router()
 
 router.get("/profile/:username", getUserProfile)
+router.put("/update-profile", auth,uploadAvatar, handleMulterError, updateProfile)
+router.delete("/delete-avatar", auth, deleteAvatar)
 router.post("follow/:userId", auth, followUser)
 router.post("/unfollow/:userId", auth, unfollowUser)
 router.get("/:userId/followers", auth, getFollowers)
