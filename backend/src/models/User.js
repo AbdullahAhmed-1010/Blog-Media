@@ -24,10 +24,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, "Password is required"],
     minLength: [6, "Password must be of atleast 6 characters"],
-    match: [
-      /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{6,}$/,
-      "Password must contain at least one letter and one number",
-    ],
+    // match: [
+    //   /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{6,}$/,
+    //   "Password must contain at least one letter and one number",
+    // ],
     select: false,
   },
   fullName: {
