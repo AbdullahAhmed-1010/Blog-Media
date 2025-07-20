@@ -26,10 +26,12 @@ const blogSchema = new mongoose.Schema({
         default: ""
     },
     mediaFiles: {
-        type: String
+        type: [String],
+        default: []
     },
     tags: {
-        type: String,
+        type: [String],
+        default: [],
         trim: true,
         lowercase: true,
         maxLength: [30, "Tag cannot exceed 30 characters"]

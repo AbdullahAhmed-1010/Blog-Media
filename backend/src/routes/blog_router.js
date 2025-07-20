@@ -42,8 +42,8 @@ router.post("/", auth, uploadBlogMedia, handleMulterError, [
 
 router.get("/", getAllBlogs)
 router.get("/:slug", getBlog)
-router.put("/update/:id", auth, uploadBlogMedia, handleMulterError, isResourceOwner(Blog), updateBlog)
-router.delete("/delete/:id", auth, isResourceOwner(Blog), deleteBlog)
+router.put("/update/:slug", auth, uploadBlogMedia, handleMulterError, isResourceOwner(Blog), updateBlog)
+router.delete("/delete/:id", auth, isResourceOwner(Blog, "slug"), deleteBlog)
 router.post("/:id/like", auth, likeBlog)
 router.post("/:id/save", auth, saveBlog)
 router.get("/saved/me", auth, getUserSavedBlogs)

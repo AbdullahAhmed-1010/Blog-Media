@@ -50,7 +50,7 @@ const isResourceOwner = (Model, resourceIdParam = "id") => {
     return async (req, res, next) => {
         try {
             const resourceId = req.params[resourceIdParam]
-            const resource = await Model.findById(resourceId)
+            const resource = await Model.findOne({ [resourceIdParam]: resourceId })
 
             if(!resource) {
                 return res.status(404).json({
